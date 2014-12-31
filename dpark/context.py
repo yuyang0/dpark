@@ -285,6 +285,9 @@ class DparkContext(object):
     def redis(self, keys, *args, **kwargs):
         return RedisRDD(self, keys, *args, **kwargs)
 
+    def ceph(self, keys, *args, **kwargs):
+        return CephRDD(self, keys, *args, **kwargs)
+
 parser = optparse.OptionParser(usage="Usage: %prog [options] [args]")
 
 def add_default_options():

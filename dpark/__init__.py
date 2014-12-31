@@ -31,3 +31,4 @@ stop = _ctx.stop
 clear = _ctx.clear
 
 makeRedisRDD = _ctx.redis
+makeCephRDD = _ctx.ceph

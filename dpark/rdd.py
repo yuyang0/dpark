@@ -18,12 +18,15 @@ import shutil
 import heapq
 import struct
 
+import rodos
+
 from dpark.serialize import load_func, dump_func
 from dpark.dependency import *
 from dpark.util import spawn, chain
 from dpark.shuffle import Merger, CoGroupMerger
 from dpark.env import env
 from dpark import moosefs
+from dpark.conf import REDIS_SETTINGS, CEPH_SETTINGS
 
 logger = logging.getLogger(__name__)
 
@@ -2099,3 +2102,52 @@ class RedisRDD(RDD):
     def __repr__(self):
         return "RedisRDD"
 
+
+class CephRDD(RDD):
+    DEFAULT_SPLIT_SIZE = 128
+    VALUES_PER_FETCH = 20
+
+    def __init__(self, ctx, key_list, num_splits=None, split_size=None, pool=None):
+        RDD.__init__(self, ctx)
+        self.init_ceph(pool)
+
+        totle_size = len(key_list)
+        if split_size is None:
+            if num_splits is None:
+                split_size = self.DEFAULT_SPLIT_SIZE
+            else:
+                split_size = totle_size / num_splits or self.DEFAULT_SPLIT_SIZE
+        self.num_splits = totle_size / split_size
+        self._splits = []
+        if totle_size % split_size > 0:
+            self.num_splits += 1
+
+        for i in range(self.num_splits):
+            split_keys = key_list[i*split_size: min(totle_size, (i+1)*split_size)]
+            self._splits.append(RedisSplit(i, split_keys))
+
+    def compute(self, split):
+        key_list = split.key_list
+        for key in key_list:
+            obj_sz, _ = self.ioctx.stat(key)
+            yield self.ioctx.read(key, obj_sz)
+
+    def init_ceph(self, pool):
+        cluster = rados.Rados(conffile=CEPH_SETTINGS['conffile'])
+        cluster.connect()
+
+        if pool is None:
+            pool = CEPH_SETTINGS['pool']
+            if not cluster.pool_exists(pool):
+                print "the pool(%s) doesn't exist.." % (pool, )
+                return
+        ioctx = cluster.open_ctx(pool)
+        self.cluster = cluster
+        self.ioctx = ioctx
+        self.pool = pool
+
+    def __repr__(self):
+        return "CephRDD"
+
+    def __len__(self):
+        return self.num_splits
