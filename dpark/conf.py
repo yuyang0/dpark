@@ -33,3 +33,14 @@ def load_conf(path):
     except Exception, e:
         logger.error("error while load conf from %s: %s", path, e)
         raise
+
+
+REDIS_SETTINGS = {
+    'host': 'localhost',
+    'port': 6379,
+    'db': 0,
+}
+
+CEPH_SETTINGS = {
+    'conffile': '',
+}
