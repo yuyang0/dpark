@@ -2034,3 +2034,68 @@ class OutputBeansdbRDD(DerivedRDD):
                 os.remove(tp[i])
 
         return sum([([p[i]] if hint[i] else []) for i in range(N)], [])
+
+
+class RedisSplit(Split):
+    def __init__(self, index, key_list):
+        self.index = index
+        self.key_list = key_list
+
+
+class RedisRDD(RDD):
+    DEFAULT_SPLIT_SIZE = 128
+    VALUES_PER_FETCH = 20
+
+    def __init__(self, ctx, key_list, num_splits=None, split_size=None):
+        RDD.__init__(self, ctx)
+        self.redis = redis.StrictRedis(REDIS_SETTINGS['host'],
+                                       REDIS_SETTINGS['port'],
+                                       REDIS_SETTINGS['db'])
+        totle_size = len(key_list)
+        if split_size is None:
+            if num_splits is None:
+                split_size = self.DEFAULT_SPLIT_SIZE
+            else:
+                split_size = totle_size / num_splits or self.DEFAULT_SPLIT_SIZE
+        self.num_splits = totle_size / split_size
+        self._splits = []
+        if totle_size % split_size > 0:
+            self.num_splits += 1
+
+        for i in range(self.num_splits):
+            split_keys = key_list[i*split_size: min(totle_size, (i+1)*split_size)]
+            self._splits.append(RedisSplit(i, split_keys))
+
+    def compute(self, split):
+        key_list = split.key_list
+        cached_values = []
+        cached_keys = []
+        cached_idx_begin = 0
+        cached_idx_end = -1
+        cur_idx = 0
+
+        while True:
+            if cur_idx >= len(key_list):
+                raise StopIteration
+            if cur_idx >= cached_idx_end:
+                cached_idx_begin = cur_idx
+                cached_idx_end = min(len(key_list), cur_idx+self.VALUES_PER_FETCH)
+                cached_keys = key_list[cached_idx_begin: cached_idx_end]
+                cached_values = self.get_redis_values(cached_keys)
+            tmp_idx = cur_idx - cached_idx_begin
+            cur_idx += 1
+            yield (cached_keys[tmp_idx], cached_values[tmp_idx])
+
+    def get_redis_values(self, keys):
+        "get multiple value in one tcp connection"
+        p = self.redis.pipeline()
+        for key in keys:
+            p.get(key)
+        return [h for h in p.execute()]
+
+    def __len__(self):
+        return self.num_splits
+
+    def __repr__(self):
+        return "RedisRDD"
+

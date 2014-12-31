@@ -29,3 +29,5 @@ start = _ctx.start
 stop = _ctx.stop
 
 clear = _ctx.clear
+
+makeRedisRDD = _ctx.redis

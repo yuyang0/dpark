@@ -282,6 +282,8 @@ class DparkContext(object):
     def __getstate__(self):
         raise ValueError("should not pickle ctx")
 
+    def redis(self, keys, *args, **kwargs):
+        return RedisRDD(self, keys, *args, **kwargs)
 
 parser = optparse.OptionParser(usage="Usage: %prog [options] [args]")
 
